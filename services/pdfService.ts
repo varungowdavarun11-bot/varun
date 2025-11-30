@@ -9,17 +9,18 @@ declare global {
 
 export const extractTextFromPDF = async (file: File): Promise<PDFData> => {
   return new Promise((resolve, reject) => {
+    // Check if the library is loaded before even trying to read the file
+    if (!window.pdfjsLib) {
+      reject(new Error("PDF Processing Library is not loaded. If you are offline, please connect to the internet once to load the necessary resources."));
+      return;
+    }
+
     const reader = new FileReader();
     
     reader.onload = async function () {
       try {
         const typedarray = new Uint8Array(this.result as ArrayBuffer);
         
-        // Use the global window.pdfjsLib
-        if (!window.pdfjsLib) {
-          throw new Error("PDF.js library not loaded");
-        }
-
         const pdf = await window.pdfjsLib.getDocument(typedarray).promise;
         let fullText = '';
         

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Message } from '../types';
-import { Bot, User, Volume2, StopCircle, Loader2 } from 'lucide-react';
+import { Bot, User, Volume2, StopCircle, Loader2, WifiOff } from 'lucide-react';
 import { generateSpeech } from '../services/geminiService';
 import { audioService } from '../services/audioService';
 
@@ -23,15 +23,27 @@ const ChatMessage: React.FC<ChatMessageProps> = ({ message, onAudioStart, onAudi
 
     setIsGeneratingAudio(true);
     try {
-      const base64Audio = await generateSpeech(message.content);
-      if (base64Audio) {
-        onAudioStart(message.id);
-        await audioService.playAudio(base64Audio, () => {
-          onAudioEnd(message.id);
-        });
+      // 1. Try to generate high-quality cloud audio ONLY if online and key exists
+      let base64Audio: string | null = null;
+      
+      if (navigator.onLine && process.env.API_KEY) {
+        try {
+          base64Audio = await generateSpeech(message.content);
+        } catch (e) {
+          console.warn("Cloud TTS failed, falling back to local immediately");
+        }
       }
+
+      // 2. Play audio (Service handles fallback to local TTS if base64Audio is null)
+      onAudioStart(message.id);
+      await audioService.play(
+        { text: message.content, base64Audio }, 
+        () => onAudioEnd(message.id)
+      );
+      
     } catch (e) {
       console.error("Failed to play audio", e);
+      onAudioEnd(message.id);
     } finally {
       setIsGeneratingAudio(false);
     }
@@ -61,7 +73,7 @@ const ChatMessage: React.FC<ChatMessageProps> = ({ message, onAudioStart, onAudi
 
           {/* TTS Button (Only for Model) */}
           {!isUser && (
-            <div className="mt-3 pt-3 border-t border-slate-100 flex items-center">
+            <div className="mt-3 pt-3 border-t border-slate-100 flex items-center justify-between">
               <button
                 onClick={handlePlayAudio}
                 disabled={isGeneratingAudio}
@@ -81,9 +93,16 @@ const ChatMessage: React.FC<ChatMessageProps> = ({ message, onAudioStart, onAudi
                   <Volume2 size={14} />
                 )}
                 <span>
-                  {isGeneratingAudio ? 'Generating Audio...' : message.isAudioPlaying ? 'Stop Reading' : 'Read Aloud'}
+                  {isGeneratingAudio ? 'Loading Audio...' : message.isAudioPlaying ? 'Stop Reading' : 'Read Aloud'}
                 </span>
               </button>
+              
+              {!navigator.onLine && !message.isAudioPlaying && (
+                 <div className="flex items-center gap-1 text-xs text-slate-400" title="Using offline voice">
+                   <WifiOff size={12} />
+                   <span>Offline Voice</span>
+                 </div>
+              )}
             </div>
           )}
         </div>
